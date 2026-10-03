@@ -13,12 +13,12 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gcc-arm-none-eabi.cmake)
 
 # Project definition
-project(primero)
+project(LED_interruption)
 
 # Enable CMake support for ASM and C/CPP languages
 enable_language(C ASM)
 
-set(PROJECT_NAME primero)
+set(PROJECT_NAME LED_interruption)
 set(CMSIS_ROOT "/home/tomash/STM32Cube/Repository/STM32Cube_FW_F4_V1.28.0")
 
 # Create an executable object type
@@ -30,7 +30,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/components.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/files.cmake)
 
 # Add sources to executable/library
-target_sources(${PROJECT_NAME} PRIVATE  # User defined sources
+target_sources(${PROJECT_NAME} PRIVATE
+  # User defined sources
 )
 
 # Add include directories
@@ -48,9 +49,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # Add additional defined symbols
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   # Add additional defined symbols here
-STM32F411xE
+  STM32F411xE
 )
-
 
 # Linker options
 target_link_options(${PROJECT_NAME} PRIVATE 
