@@ -20,7 +20,8 @@
 #include "stm32f4xx.h"
 int main(void)
 {   
-    RCC->AHB1ENR |= (1 << 0); // Enciende el reloj de GPIOA (bit 0)
+    
+    RCC_AHB1ENR_GPIOAEN; // Enciende el reloj de GPIOA (bit 0)
     GPIOA->MODER &= ~(0b11 << (5 * 2)); // Limpia bits 11:10
     GPIOA->MODER |= (0b01 << (5 * 2)); // Modo salida
     GPIOA->OTYPER &= ~(1 << 5); // Push-Pull
