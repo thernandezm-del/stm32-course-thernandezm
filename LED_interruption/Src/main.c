@@ -19,9 +19,14 @@
 #include <stdint.h>
 #include <stm32f4xx.h>
 
+volatile uint8_t update_flag = 0; // Global counter variable
 int main(void)
 {   
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN; // Enable TIM3 clock
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // Enable GPIOA clock
+    GPIOA->MODER |= GPIO_MODER_MODER5_0; // Set PA5 as output (for example, to toggle an LED)
+    GPIOA->OTYPER &= ~GPIO_OTYPER_OT5; // Set PA5 as push-pull
+    GPIOA->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR0_0; // Set PA5 speed to low 
     TIM3->CR1 &= ~TIM_CR1_CEN; // Disable TIM3 COUNTER
     /*
     CEN IS OFF FIRST TO PREVENT THE COUNTER FROM STARTING TO COUNT BEFORE WE SET THE PRESCALER AND AUTO-RELOAD VALUE.
@@ -43,6 +48,10 @@ int main(void)
     THIS MIGHT BE CAUSED WHEN WE USED DE UG TO UPDATE OUT ARPE AND PSC VALUES.
     */
    TIM3->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
+   /*
+   SOMETHING TO REMEBER IS THAT UIF FLAG IS ONLY ONE OF THE FLAGS THAT CAN BE SET IN THE SR REGISTER. THERE ARE OTHER FLAGS THAT CAN BE SET IN THE SR REGISTER,
+  BUT WE ONLY CARE ABOUT THE UIF FLAG FOR NOW. THERE ARE OTHER KIND OF INTERRUPTIONS TIM3 CAN HANDLE
+    */
    TIM3->DIER |= TIM_DIER_UIE; // Enable TIM3 update interrupt
    /*
    FROM THE TEACHER'S DIAGRAM, WE NEED TO ENABLE THE UIE BIT WICH IS AN AND GATE THAT CONTROLS THE UPDATE
@@ -53,9 +62,29 @@ int main(void)
     WE ALLOWING THE CPU TO RECEIVE INTERRUPTS FROM THE TIM3 PERIPHERAL. 
     WE NEED TO ENABLE THE NVIC INTERRUPT FOR TIM3.
   */
-
+  TIM3->CR1 |= TIM_CR1_CEN; // Enable TIM3 COUNTER 
     while (1)
     {
         // Main loop
+        if(update_flag)
+        {
+            // Handle the update event
+            update_flag = 0; // Reset the flag
+            // Perform any other actions needed on update event
+            GPIOA->ODR ^= GPIO_ODR_OD5; // Toggle an LED connected to PA5 (for example)
+            TIM3->CR1 |= TIM_CR1_CEN; // Enable TIM3 COUNTER
+
+        }
+    }
+}
+
+void TIM3_IRQHandler(void)
+{
+    /* Handle the TIM3 interrupt here */
+    if(TIM3->SR & TIM_SR_UIF) //UIF IS THE 
+    { 
+      TIM3->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag UPDATE FLAG TO CERO
+
+      update_flag=1; // Increment the global counter variable
     }
 }
