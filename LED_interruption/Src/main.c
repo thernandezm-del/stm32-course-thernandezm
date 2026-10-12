@@ -66,25 +66,31 @@ int main(void)
     while (1)
     {
         // Main loop
-        if(update_flag)
-        {
-            // Handle the update event
-            update_flag = 0; // Reset the flag
-            // Perform any other actions needed on update event
-            GPIOA->ODR ^= GPIO_ODR_OD5; // Toggle an LED connected to PA5 (for example)
-            TIM3->CR1 |= TIM_CR1_CEN; // Enable TIM3 COUNTER
+        
 
         }
-    }
 }
+
 
 void TIM3_IRQHandler(void)
 {
     /* Handle the TIM3 interrupt here */
-    if(TIM3->SR & TIM_SR_UIF) //UIF IS THE 
+    if(TIM3->SR & TIM_SR_UIF) //UIF IS THE UPDATE INTERRUPT FLAG, IT IS SET WHEN THE COUNTER REACHES THE AUTO-RELOAD VALUE. 
     { 
       TIM3->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag UPDATE FLAG TO CERO
 
-      update_flag=1; // Increment the global counter variable
+      GPIOA->ODR ^= GPIO_ODR_OD5; // Toggle an LED connected to PA5 (for example)//ESTA LINEA SE AÑADIO AL CHECK DEL UIF PARA
+      //EJECUTAR DENTRO DEL EL Y HACER LA EJECUCION EN INTERRUPCION Y HACERLA CORTA
+
+      //update_flag=1; // Increment the global counter variable 
     }
+
+    // if(update_flag)
+    //     {
+    //         // Handle the update event
+    //         update_flag = 0; // Reset the flag
+    //         // Perform any other actions needed on update event
+            
+    //     }
+    //ESTAS LINEAS ESTÁN COMENTADAS PARA USARSE DE OTRA FORMA, PARA EJECUTAR EN EL MAIN
 }
