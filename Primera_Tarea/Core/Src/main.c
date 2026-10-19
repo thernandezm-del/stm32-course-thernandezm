@@ -19,20 +19,38 @@
 #include <stm32f411xe.h>
 #include <stm32f4xx.h>
 
+//DECLARACIÓN VARIABLES DEL CODIGO
+volatile uint8_t uflag = 0;
+volatile uint8_t dflag = 0;
+uint16_t counter = 1234;
+uint8_t unidades = 0;
+uint8_t decenas = 0;
+uint8_t centenas = 0;
+uint8_t miles = 0;
+
+//DECLARACIÓN FUNCIONES
 void init_timers (void);
 void init_gpio (void);
+void init_EXTI (void);
+void check_flags (void);
+void digit_manager (void);
 
+//INICIO MAIN CODE
 int main(void)
 {
-    init_timers(); //Funcion para inicializar el Timer 10
-    init_gpio(); //Funcion para incializar los Pin GPIO necesarios
+    init_timers(); //Llamado funcion para inicializar el Timer 10
+    init_gpio(); //Llamado funcion para incializar los Pin GPIO necesarios
+    init_EXTI(); //Llamado función de inicializacion del EXTI
+
     while (1)
     {
+        check_flags();
+        digit_manager();
         // Loop principal
     }
 }
-
-void init_timers (void)
+/*---INICO INICIALIZACIONES---*/
+void init_timers (void) //Inicialización de los Timers usados
 {
     RCC->APB2ENR |= RCC_APB2ENR_TIM10EN; //Habilitamos el reloj del Timer 10 
     TIM10->CR1 |= TIM_CR1_ARPE; //Habilitamos la precarga del Timer 10
@@ -44,17 +62,44 @@ void init_timers (void)
     
 }
 
-void init_gpio (void)
+void init_gpio (void) //Inicialización y configuración de pines
 {
-//CONFIGURACIÓN PIN H1
+//CONFIGURACIÓN PIN H1 PARA LED_OK
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOHEN; // Enable GPIOH clock
     GPIOH->MODER &= ~GPIO_MODER_MODER1; // Clear mode bits for PH1
     GPIOH->MODER |= GPIO_MODER_MODER1_0; // Set PH1 as output
     GPIOH->OTYPER &= ~GPIO_OTYPER_OT_1; // Set PH1 as push-pull
     GPIOH->OSPEEDR &= ~GPIO_OSPEEDER_OSPEEDR1; // Clear speed bits for PH1 y queda en baja velocidad
+//CONFIGURACIÓN PARA LECTURA DE BAJADA
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN; //Activamso el reloj del puerto B
+    GPIOB->MODER &= ~GPIO_MODER_MODER5; //Limpiamos los bits y aseguramos valor de reset para lectura
+//CONFIGURACIÓN PARA LECTURA DE BAJADA
+    GPIOB->MODER &= ~GPIO_MODER_MODER6; //Limpiamos los bits y aseguramos valor de reset para lectura
+
 }
 
-void TIM1_UP_TIM10_IRQHandler(void)
+void init_EXTI (void) //Inicialización y configuración de EXTI
+{
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN; //Habilitamos el reloj del SYSCFG
+//CONFIGURACIÓN DE EXTI PARA BAJADA
+    SYSCFG->EXTICR[1] &= ~SYSCFG_EXTICR2_EXTI5; //Limpiamos
+    SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI5_PB; //Definimos que usará el pin 5 del GPIOB
+    EXTI->FTSR |= EXTI_FTSR_TR5; //Activamos el flanco de bajada para pin 5
+    EXTI->RTSR &= ~EXTI_RTSR_TR5; //Se desactiva el flanco de subida para el pin 5
+    EXTI->IMR |= EXTI_IMR_MR5; //Le quitamos la mascara
+//CONFIGURACIÓN DE EXTI PARA SUBIDA
+    SYSCFG->EXTICR[1] &= ~SYSCFG_EXTICR2_EXTI6; //Limpiamos
+    SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI6_PB; //Definimos que usará el pin 6 del GPIOB
+    EXTI->FTSR |= EXTI_FTSR_TR6; //Activamos el flanco de bajada para pin 6
+    EXTI->RTSR &= ~EXTI_RTSR_TR6; //Se desactiva el flanco de subida para el pin 6
+    EXTI->IMR |= EXTI_IMR_MR6; //Le quitamos la mascara
+    NVIC_EnableIRQ(EXTI2_IRQn);
+}
+/*---FIN INCIALIZACIONES---*/
+
+
+/*---INICIO FUNCIONES---*/
+void TIM1_UP_TIM10_IRQHandler(void) //INTERRUPCIÓN PARA LED_OK
 {
     if(TIM10->SR & TIM_SR_UIF) //Verificamos que sea la bandera que se activó
     {
@@ -63,3 +108,35 @@ void TIM1_UP_TIM10_IRQHandler(void)
     }
 }
 
+void EXTI9_5_IRQHandler(void){ //Handler de la foto interrupción
+    if(EXTI->PR & EXTI_PR_PR5){
+    EXTI->PR = EXTI_PR_PR5;
+    dflag = 1;
+    }
+
+    if(EXTI->PR & EXTI_PR_PR6){
+    EXTI->PR = EXTI_PR_PR6;
+    uflag = 1;
+    }
+}
+
+void check_flags(void){
+    if(uflag==1){
+        uflag = 0;
+        counter += 1;
+        
+    }
+    if(dflag==1){
+        dflag = 0;
+        counter -=1;
+
+    }       
+}
+
+void digit_manager(void){
+    unidades = counter%10;
+    decenas = (counter/10)%10;
+    centenas = (counter/100)%10;
+    miles = (counter/1000)%10;
+}
+/*---FIN FUNCIONES---*/
