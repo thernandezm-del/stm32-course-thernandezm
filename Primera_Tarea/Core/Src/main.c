@@ -255,40 +255,44 @@ void cambio_digitos (void){
         GPIOC->BSRR = GPIO_BSRR_BS11;
         GPIOC->BSRR = GPIO_BSRR_BS12;
         GPIOC->BSRR = GPIO_BSRR_BS13;
-        GPIOC->BSRR = GPIO_BSRR_BR1;
+//        GPIOC->BSRR = GPIO_BSRR_BR1; de prueba para un segmento y un digito
         
 
-        switch (digito_actual)
-    {
-	case UNIDADES:
-		/* Encender unidades: PC13 en bajo */
-		/* Guardar DECENAS como próximo turno */
-        GPIOC->BSRR = GPIO_BSRR_BR13;
-        digito_actual = DECENAS;		
-        break;
+            switch (digito_actual)
+        {
+        case UNIDADES:
+            /* Encender unidades: PC13 en bajo */
+            /* Guardar DECENAS como próximo turno */
+            display_SetNumber(unidades);
+            GPIOC->BSRR = GPIO_BSRR_BR13;
+            digito_actual = DECENAS;	
+            break;
 
-	case DECENAS:
-		/* Encender decenas: PC10 en bajo */
-		/* Guardar CENTENAS como próximo turno */
-        GPIOC->BSRR = GPIO_BSRR_BR10;
-        digito_actual = CENTENAS;		
+        case DECENAS:
+            /* Encender decenas: PC10 en bajo */
+            /* Guardar CENTENAS como próximo turno */
+            display_SetNumber(decenas);
+            GPIOC->BSRR = GPIO_BSRR_BR10;
+            digito_actual = CENTENAS;		
 
-		break;
-    case CENTENAS:
-		/* Encender decenas: PC12 en bajo */
-		/* Guardar MILLARES como próximo turno */
-        GPIOC->BSRR = GPIO_BSRR_BR12;
-        digito_actual = MILLARES;		
+            break;
+        case CENTENAS:
+            /* Encender decenas: PC12 en bajo */
+            /* Guardar MILLARES como próximo turno */
+            display_SetNumber(centenas);
+            GPIOC->BSRR = GPIO_BSRR_BR12;
+            digito_actual = MILLARES;		
 
-		break;
-	case MILLARES:
-		/* Encender decenas: PC11 en bajo */
-		/* Guardar UNIDADES como próximo turno */
-        GPIOC->BSRR = GPIO_BSRR_BR11;
-        digito_actual = UNIDADES;		
+            break;
+        case MILLARES:
+            /* Encender decenas: PC11 en bajo */
+            /* Guardar UNIDADES como próximo turno */
+            display_SetNumber(miles);
+            GPIOC->BSRR = GPIO_BSRR_BR11;
+            digito_actual = UNIDADES;		
 
-		break;
-    }
+            break;
+        }
     }
 }
 
