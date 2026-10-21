@@ -20,20 +20,34 @@
 #include <stm32f4xx.h>
 
 //DECLARACIÓN VARIABLES DEL CODIGO
+enum estado_display
+{
+	UNIDADES,
+	DECENAS,
+    CENTENAS,
+    MILLARES
+};
+enum estado_display digito_actual = UNIDADES;
 volatile uint8_t uflag = 0;
 volatile uint8_t dflag = 0;
-uint16_t counter = 1234;
+uint16_t counter = 10;
 uint8_t unidades = 0;
 uint8_t decenas = 0;
 uint8_t centenas = 0;
 uint8_t miles = 0;
+uint8_t digito_flag = 0;
+
+
 
 //DECLARACIÓN FUNCIONES
 void init_timers (void);
 void init_gpio (void);
 void init_EXTI (void);
 void check_flags (void);
-void digit_manager (void);
+void digit_manager (void); // Separa numeros en sus digitos en su respectiva variable
+void cambio_digitos(void); // Alternador de digitos del display (bjt)
+void display_SetNumber(uint8_t numero); //Asignación segmento numeros
+
 
 //INICIO MAIN CODE
 int main(void)
@@ -46,20 +60,31 @@ int main(void)
     {
         check_flags();
         digit_manager();
+        cambio_digitos();
         // Loop principal
     }
 }
 /*---INICO INICIALIZACIONES---*/
 void init_timers (void) //Inicialización de los Timers usados
 {
+//CONFIGURACIÓN TIMER 10
     RCC->APB2ENR |= RCC_APB2ENR_TIM10EN; //Habilitamos el reloj del Timer 10 
     TIM10->CR1 |= TIM_CR1_ARPE; //Habilitamos la precarga del Timer 10
     TIM10->DIER |= TIM_DIER_UIE; //Habilitamos al interrupcion del Timer 10
     TIM10->PSC = 16000-1; //Ponemos el prescaler a este valor para dividirlo en pulsos de 1ms
     TIM10->ARR = 1000-1; //Ponemos este valor para que cada un segundo genere el pulso
-    NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
+    NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn); //Damos acceso al NVIC al TIMER 10
     TIM10->CR1 |= TIM_CR1_CEN; //Habilitamos el counter del Timer 10
-    
+
+    //CONFIGURACIÓN TIMER 4
+    RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
+    TIM4->CR1 |= TIM_CR1_ARPE; //Habilitamos la precarga del Timer 4
+    TIM4->DIER |= TIM_DIER_UIE; //Habilitamos al interrupcion del Timer 4
+    TIM4->PSC = 16000-1; //Ponemos el prescaler a este valor para dividirlo en pulsos de 1ms
+    TIM4->ARR = 1000-1; //Ponemos este valor para que cada un segundo cambie los digitos
+    NVIC_EnableIRQ(TIM4_IRQn); //Damos acceso al NVIC al TIMER 4
+    TIM4->CR1 |= TIM_CR1_CEN; //Habilitamos el counter del Timer 4
+
 }
 
 void init_gpio (void) //Inicialización y configuración de pines
@@ -70,11 +95,82 @@ void init_gpio (void) //Inicialización y configuración de pines
     GPIOH->MODER |= GPIO_MODER_MODER1_0; // Set PH1 as output
     GPIOH->OTYPER &= ~GPIO_OTYPER_OT_1; // Set PH1 as push-pull
     GPIOH->OSPEEDR &= ~GPIO_OSPEEDER_OSPEEDR1; // Clear speed bits for PH1 y queda en baja velocidad
-//CONFIGURACIÓN PARA LECTURA DE BAJADA
+//ACTIVAMOS RELOJ DEL GPIOB
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN; //Activamso el reloj del puerto B
+    //CONFIGURACIÓN PARA LECTURA DE BAJADA _RESTA_
     GPIOB->MODER &= ~GPIO_MODER_MODER5; //Limpiamos los bits y aseguramos valor de reset para lectura
-//CONFIGURACIÓN PARA LECTURA DE BAJADA
+    GPIOB->PUPDR &= ~GPIO_PUPDR_PUPD5; /* PB5: sin pull interno */
+//CONFIGURACIÓN PARA LECTURA DE BAJADA _SUMA_
     GPIOB->MODER &= ~GPIO_MODER_MODER6; //Limpiamos los bits y aseguramos valor de reset para lectura
+    GPIOB->PUPDR &= ~GPIO_PUPDR_PUPD6; /* PB6: sin pull interno */
+
+//CONFIGURACIÓN PINES 7 SEGMENTOS
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN; // Encendemos para pin del digito unidad
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // Encendemos para pin del segmento "a"
+    GPIOC->BSRR = GPIO_BSRR_BS10; /* PC10 alto: dígito apagado */
+    GPIOA->BSRR = GPIO_BSRR_BS0;  /* PA0 alto: segmento apagado */
+    GPIOC->MODER &= ~GPIO_MODER_MODER10; // Limpiamos los bits
+    GPIOC->MODER |= GPIO_MODER_MODER10_0; // Configuramos como salidas 
+    GPIOA->MODER &= ~GPIO_MODER_MODER0; //Limpiamos los bits
+    GPIOA->MODER |= GPIO_MODER_MODER0_0; //Configuramos como salidas
+    GPIOC->OTYPER &= ~GPIO_OTYPER_OT_10; /* PC10: push-pull */
+    GPIOA->OTYPER &= ~GPIO_OTYPER_OT_0;  /* PA0: push-pull */
+ //A PARTIR DE ACÁ CONFIGURAMOS TODOS LOS PINES DE LOS SEGMENTOS
+ 	/* Dejar los pines como entradas mientras se preparan */
+	GPIOC->MODER &= ~GPIO_MODER_MODER1;
+	GPIOC->MODER &= ~GPIO_MODER_MODER2;
+	GPIOC->MODER &= ~GPIO_MODER_MODER8;
+	GPIOC->MODER &= ~GPIO_MODER_MODER6;
+	GPIOC->MODER &= ~GPIO_MODER_MODER5;
+	GPIOC->MODER &= ~GPIO_MODER_MODER0;
+	GPIOC->MODER &= ~GPIO_MODER_MODER9;
+	GPIOC->MODER &= ~GPIO_MODER_MODER10;
+	GPIOC->MODER &= ~GPIO_MODER_MODER11;
+	GPIOC->MODER &= ~GPIO_MODER_MODER12;
+	GPIOC->MODER &= ~GPIO_MODER_MODER13;
+
+	/* Seleccionar push-pull */
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_1;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_2;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_8;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_6;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_5;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_0;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_9;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_10;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_11;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_12;
+	GPIOC->OTYPER &= ~GPIO_OTYPER_OT_13;
+
+	/* Preparar selectores apagados: nivel alto */
+	GPIOC->BSRR = GPIO_BSRR_BS10;
+	GPIOC->BSRR = GPIO_BSRR_BS11;
+	GPIOC->BSRR = GPIO_BSRR_BS12;
+	GPIOC->BSRR = GPIO_BSRR_BS13;
+
+	/* Preparar segmentos apagados: nivel alto */
+	GPIOC->BSRR = GPIO_BSRR_BS1; /* a */
+	GPIOC->BSRR = GPIO_BSRR_BS2; /* b */
+	GPIOC->BSRR = GPIO_BSRR_BS8; /* c */
+	GPIOC->BSRR = GPIO_BSRR_BS6; /* d */
+	GPIOC->BSRR = GPIO_BSRR_BS5; /* e */
+	GPIOC->BSRR = GPIO_BSRR_BS0; /* f */
+	GPIOC->BSRR = GPIO_BSRR_BS9; /* g */
+
+	/* Habilitar salidas de los selectores, ya apagados */
+	GPIOC->MODER |= GPIO_MODER_MODER10_0;
+	GPIOC->MODER |= GPIO_MODER_MODER11_0;
+	GPIOC->MODER |= GPIO_MODER_MODER12_0;
+	GPIOC->MODER |= GPIO_MODER_MODER13_0;
+
+	/* Habilitar salidas de los segmentos, ya apagados */
+	GPIOC->MODER |= GPIO_MODER_MODER1_0;
+	GPIOC->MODER |= GPIO_MODER_MODER2_0;
+	GPIOC->MODER |= GPIO_MODER_MODER8_0;
+	GPIOC->MODER |= GPIO_MODER_MODER6_0;
+	GPIOC->MODER |= GPIO_MODER_MODER5_0;
+	GPIOC->MODER |= GPIO_MODER_MODER0_0;
+	GPIOC->MODER |= GPIO_MODER_MODER9_0;
 
 }
 
@@ -93,12 +189,14 @@ void init_EXTI (void) //Inicialización y configuración de EXTI
     EXTI->FTSR |= EXTI_FTSR_TR6; //Activamos el flanco de bajada para pin 6
     EXTI->RTSR &= ~EXTI_RTSR_TR6; //Se desactiva el flanco de subida para el pin 6
     EXTI->IMR |= EXTI_IMR_MR6; //Le quitamos la mascara
-    NVIC_EnableIRQ(EXTI2_IRQn);
+    NVIC_EnableIRQ(EXTI2_IRQn); //Damos permiso de acceso al NNIC a esta interrupción
+    NVIC_EnableIRQ(EXTI9_5_IRQn); //Damos permiso de acceso al NNIC a esta interrupción
+
 }
 /*---FIN INCIALIZACIONES---*/
 
+/*INICIO DEFINICIÓN DE ISR*/
 
-/*---INICIO FUNCIONES---*/
 void TIM1_UP_TIM10_IRQHandler(void) //INTERRUPCIÓN PARA LED_OK
 {
     if(TIM10->SR & TIM_SR_UIF) //Verificamos que sea la bandera que se activó
@@ -120,6 +218,16 @@ void EXTI9_5_IRQHandler(void){ //Handler de la foto interrupción
     }
 }
 
+void TIM4_IRQHandler (void){
+    if(TIM4->SR & TIM_SR_UIF){
+        TIM4->SR &= ~TIM_SR_UIF;
+        digito_flag = 1;
+    }
+}
+/*FIN DEFINICIÓN DE ISR*/
+
+/*---INICIO FUNCIONES---*/
+
 void check_flags(void){
     if(uflag==1){
         uflag = 0;
@@ -133,10 +241,171 @@ void check_flags(void){
     }       
 }
 
-void digit_manager(void){
+void digit_manager (void){
     unidades = counter%10;
     decenas = (counter/10)%10;
     centenas = (counter/100)%10;
-    miles = (counter/1000)%10;
+    miles = (counter/1000)%10;  
 }
-/*---FIN FUNCIONES---*/
+
+void cambio_digitos (void){
+    if(digito_flag==1){
+        digito_flag = 0;
+        GPIOC->BSRR = GPIO_BSRR_BS10;
+        GPIOC->BSRR = GPIO_BSRR_BS11;
+        GPIOC->BSRR = GPIO_BSRR_BS12;
+        GPIOC->BSRR = GPIO_BSRR_BS13;
+        GPIOC->BSRR = GPIO_BSRR_BR1;
+        
+
+        switch (digito_actual)
+    {
+	case UNIDADES:
+		/* Encender unidades: PC13 en bajo */
+		/* Guardar DECENAS como próximo turno */
+        GPIOC->BSRR = GPIO_BSRR_BR13;
+        digito_actual = DECENAS;		
+        break;
+
+	case DECENAS:
+		/* Encender decenas: PC10 en bajo */
+		/* Guardar CENTENAS como próximo turno */
+        GPIOC->BSRR = GPIO_BSRR_BR10;
+        digito_actual = CENTENAS;		
+
+		break;
+    case CENTENAS:
+		/* Encender decenas: PC12 en bajo */
+		/* Guardar MILLARES como próximo turno */
+        GPIOC->BSRR = GPIO_BSRR_BR12;
+        digito_actual = MILLARES;		
+
+		break;
+	case MILLARES:
+		/* Encender decenas: PC11 en bajo */
+		/* Guardar UNIDADES como próximo turno */
+        GPIOC->BSRR = GPIO_BSRR_BR11;
+        digito_actual = UNIDADES;		
+
+		break;
+    }
+    }
+}
+
+void display_SetNumber(uint8_t numero)
+{
+	switch (numero)
+	{	
+    case 0:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BR5; /* Encender e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BS9; /* Apagar g */
+        break;
+
+    case 1:
+        GPIOC->BSRR = GPIO_BSRR_BS1; /* Apagar a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BS6; /* Apagar d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BS0; /* Apagar f */
+        GPIOC->BSRR = GPIO_BSRR_BS9; /* Apagar g */
+        break;
+
+    case 2:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BS8; /* Apagar c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BR5; /* Encender e */
+        GPIOC->BSRR = GPIO_BSRR_BS0; /* Apagar f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 3:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BS0; /* Apagar f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 4:
+        GPIOC->BSRR = GPIO_BSRR_BS1; /* Apagar a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BS6; /* Apagar d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 5:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BS2; /* Apagar b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 6:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BS2; /* Apagar b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BR5; /* Encender e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 7:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BS6; /* Apagar d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BS0; /* Apagar f */
+        GPIOC->BSRR = GPIO_BSRR_BS9; /* Apagar g */
+        break;
+
+    case 8:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BR5; /* Encender e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    case 9:
+        GPIOC->BSRR = GPIO_BSRR_BR1; /* Encender a */
+        GPIOC->BSRR = GPIO_BSRR_BR2; /* Encender b */
+        GPIOC->BSRR = GPIO_BSRR_BR8; /* Encender c */
+        GPIOC->BSRR = GPIO_BSRR_BR6; /* Encender d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BR0; /* Encender f */
+        GPIOC->BSRR = GPIO_BSRR_BR9; /* Encender g */
+        break;
+
+    default:
+        GPIOC->BSRR = GPIO_BSRR_BS1; /* Apagar a */
+        GPIOC->BSRR = GPIO_BSRR_BS2; /* Apagar b */
+        GPIOC->BSRR = GPIO_BSRR_BS8; /* Apagar c */
+        GPIOC->BSRR = GPIO_BSRR_BS6; /* Apagar d */
+        GPIOC->BSRR = GPIO_BSRR_BS5; /* Apagar e */
+        GPIOC->BSRR = GPIO_BSRR_BS0; /* Apagar f */
+        GPIOC->BSRR = GPIO_BSRR_BS9; /* Apagar g */
+	    /* Valor fuera de 0–9: mantener los segmentos apagados */
+	    break;
+    }
+}
+    /*---FIN FUNCIONES---*/
